@@ -6,10 +6,9 @@ import streamlit as st
 
 # ==========================================
 # [API 키 설정]
+# 구글 AI Studio(https://aistudio.google.com/)에서 무료로 발급받은 키를 입력하세요.
 # ==========================================
-# 1. Streamlit Secrets을 사용하거나
-# 2. 아래 "YOUR_GEMINI_API_KEY_HERE" 부분에 직접 Gemini API 키를 입력하세요.
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "up_Y7OKHBUB2q7pi7C4E1ILIWItBAUOG")
 
 # ==========================================
 # [데이터 및 상수 정의]
@@ -206,7 +205,7 @@ PREDICTION_POOLS = {
 
 
 # ==========================================
-# [파이썬 기본 내장 모듈 기반 API 호출 함수]
+# [헬퍼 함수 및 실시간 검색 통신]
 # ==========================================
 def select_prediction_pool(features):
     """음식의 특징에 알맞은 예측 메시지 풀을 선택합니다."""
@@ -224,29 +223,25 @@ def select_prediction_pool(features):
     return PREDICTION_POOLS["custom"]
 
 
-def fetch_food_data_native(food_name):
-    """외부 패키지 없이 urllib(파이썬 기본 내장) 모듈로 Gemini API를 직접 호출합니다."""
-
-    # API URL 구성
+def fetch_food_data_from_ai(food_name):
+    """설치된 라이브러리 없이 파이썬 기본 기능(urllib)으로 실시간 AI 탐색을 수행합니다."""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
 
-    # 프롬프트 생성
     prompt_text = f"""
-    음식/디저트 트렌드 분석 전문가로서 답변해주세요.
+    당신은 음식 트렌드 분석가입니다.
     입력된 음식: '{food_name}'
     
-    이 음식의 대한민국 내 트렌드 유행 정보와 특성을 추론/분석하여 반드시 아래 JSON 표준 규격으로만 응답하세요.
-    마크다운 코드 블록(```json ...) 없이 오직 순수 JSON 데이터만 출력하세요.
+    이 음식의 한국 내 트렌드 유행 정보와 성공 요인을 추론 및 검색하여 아래 규격의 순수 JSON 형식으로만 응답하세요.
+    코드 블록(```json 등)은 절대 포함하지 마세요.
 
     {{
-        "emoji": "음식과 잘 어울리는 단일 이모지 1개",
-        "start": "유행 시작 시점 (예: 2023년 5월)",
-        "end": "유행 종료 시점 또는 현재 상태 (예: 2024년 1월 또는 2024년 10월~(현재))",
-        "features": ["핵심 특징 1", "핵심 특징 2", "핵심 특징 3"]
+        "emoji": "음식에 어울리는 이모지 1개",
+        "start": "유행 시작 연월 (예: 2023년 5월)",
+        "end": "유행 종료 연월 또는 현재 상태 (예: 2024년 1월 또는 2024년 10월~(현재))",
+        "features": ["성공요인 1", "성공요인 2", "성공요인 3"]
     }}
     """
 
-    # REST API Payload 설정
     payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
 
     data = json.dumps(payload).encode("utf-8")
@@ -255,114 +250,13 @@ def fetch_food_data_native(food_name):
     )
 
     try:
-        # HTTP 통신 수행
         with urllib.request.urlopen(req, timeout=10) as response:
             res_body = response.read().decode("utf-8")
             res_json = json.loads(res_body)
 
-            # Gemini 응답 텍스트 추출
+            # AI 응답 텍스트 파싱
             text_response = res_json["candidates"][0]["content"]["parts"][0][
                 "text"
             ]
-
-            # JSON 파싱 전 마크다운 태그 정돈
             cleaned_text = (
-                text_response.strip().replace("```json", "").replace("```", "")
-            )
-            return json.loads(cleaned_text)
-
-    except Exception as e:
-        # 오류 발생 시 기본값 반환
-        return {
-            "emoji": "🍽️",
-            "start": "정보 탐색 실패",
-            "end": "정보 탐색 실패",
-            "features": [
-                f"{food_name} 트렌드",
-                "이색 디저트/요리",
-                "SNS 화제성",
-            ],
-        }
-
-
-# ==========================================
-# [Streamlit UI 구성]
-# ==========================================
-st.set_page_config(
-    page_title="트렌드 음식 분석 AI", page_icon="🍲", layout="centered"
-)
-
-st.title("🍲 트렌드 음식 분석 및 다음 유행 예측 대시보드")
-st.markdown(
-    "과거 및 현재 유행하는 트렌드 음식을 입력해 보세요! "
-    "**DB에 없는 신규 음식도 AI가 실시간으로 분석합니다.**"
-)
-st.markdown("---")
-
-# 사이드바 설정
-st.sidebar.header("📌 이용 안내")
-st.sidebar.info(
-    "• 분석하고 싶은 음식 이름을 **자유롭게 입력**하세요.\n"
-    "• DB에 없는 음식은 **파이썬 기본 통신 모듈로 실시간 자동 검색**합니다.\n"
-    "• 종료하려면 **'그만'**을 입력하세요."
-)
-
-# 사용자 입력 받기
-user_input = st.text_input(
-    "🔍 분석할 음식 이름을 입력하세요:",
-    placeholder="예: 두바이 초콜릿, 요아정, 아사이볼, 크루키 등",
-).strip()
-
-# 분석 실행 버튼
-if st.button("🚀 분석 및 예측 실행", type="primary"):
-
-    if user_input == "그만":
-        st.warning("👋 프로그램을 종료합니다. 이용해 주셔서 감사합니다!")
-        st.stop()
-
-    elif not user_input:
-        st.warning("⚠️ 음식 이름을 입력해 주세요.")
-
-    else:
-        info = None
-        is_ai_fetched = False
-
-        if user_input in FOOD_DATABASE:
-            info = FOOD_DATABASE[user_input]
-        else:
-            with st.spinner(
-                f"🔍 DB에 없는 음식입니다. 실시간 데이터 검색 중... ({user_input})"
-            ):
-                info = fetch_food_data_native(user_input)
-                is_ai_fetched = True
-
-        emoji = info.get("emoji", "🍲")
-        start_date = info.get("start", "정보 없음")
-        end_date = info.get("end", "정보 없음")
-        features = info.get("features", ["트렌드 요리"])
-
-        pool = select_prediction_pool(features)
-        selected_prediction = random.choice(pool)
-
-        st.success(f"분석 완료: **{emoji} {user_input}**")
-
-        if is_ai_fetched:
-            st.caption(
-                "✨ *추가 라이브러리 설치 없이 파이썬 내장 urllib 모듈을 통해"
-                " 수집된 정보입니다.*"
-            )
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric(label="📅 유행 시작 시점", value=start_date)
-        with col2:
-            st.metric(label="🏁 유행 종료 시점", value=end_date)
-
-        st.markdown("### 🤖 핵심 성공 요인")
-        features_md = " ".join([f"`{feat}`" for feat in features])
-        st.markdown(features_md)
-
-        st.markdown("---")
-
-        st.markdown("### 🔮 다음 유행 예측")
-        st.info(selected_prediction)
+                text_response.strip().replace("
